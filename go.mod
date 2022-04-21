@@ -1,10 +1,11 @@
-module github.com/cyverse-de/discoenv-users-service
+module github.com/cyverse-de/discoenv-users
 
-go 1.17
+go 1.18
 
 require (
 	github.com/cyverse-de/configurate v0.0.0-20220113221928-13d34aae3f0f
 	github.com/cyverse-de/go-mod/logging v0.0.1
+	github.com/cyverse-de/go-mod/protobufjson v0.0.1
 	github.com/cyverse-de/p/go/svcerror v0.0.2
 	github.com/cyverse-de/p/go/user v0.0.5
 	github.com/doug-martin/goqu/v9 v9.18.0

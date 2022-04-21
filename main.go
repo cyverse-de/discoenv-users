@@ -3,13 +3,13 @@ package main
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"flag"
 	"fmt"
 	"time"
 
 	"github.com/cyverse-de/configurate"
 	"github.com/cyverse-de/go-mod/logging"
+	"github.com/cyverse-de/go-mod/protobufjson"
 	"github.com/cyverse-de/p/go/svcerror"
 	"github.com/cyverse-de/p/go/user"
 	"github.com/doug-martin/goqu/v9"
@@ -18,44 +18,10 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var log = logging.Log.WithFields(logrus.Fields{"service": "discoenv-users-service"})
-
-// ProtobufJSON is a an implmentation of the NATS Encoder interface that
-// can serialize/deserialize messages using protojson. Some logic is borrowed
-// from the protocol buffer encoder included in NATS.
-// See https://github.com/nats-io/nats.go/blob/main/encoders/protobuf/protobuf_enc.go
-type ProtobufJSON struct{}
-
-func (p *ProtobufJSON) Encode(subject string, v interface{}) ([]byte, error) {
-	msg, ok := v.(proto.Message)
-	if !ok {
-		return nil, errors.New("invalid protocol buffer message passed to Encode()")
-	}
-	b, err := protojson.Marshal(msg)
-	if err != nil {
-		return nil, err
-	}
-	return b, nil
-}
-
-func (p *ProtobufJSON) Decode(subject string, data []byte, vPtr interface{}) error {
-	if _, ok := vPtr.(*interface{}); ok {
-		return nil
-	}
-
-	msg, ok := vPtr.(proto.Message)
-	if !ok {
-		return errors.New("invalid protocol buffer message passed to Decode()")
-	}
-
-	return protojson.Unmarshal(data, msg)
-
-}
 
 type lookupUser struct {
 	Username        string `db:"username"`
@@ -160,7 +126,7 @@ func main() {
 	flag.Parse()
 	logging.SetupLogging(*logLevel)
 
-	nats.RegisterEncoder("protojson", &ProtobufJSON{})
+	nats.RegisterEncoder("protojson", &protobufjson.Codec{})
 
 	config, err = configurate.Init(*configPath)
 	if err != nil {
@@ -200,7 +166,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	conn.QueueSubscribe(*natsSubject, *natsQueue, func(subject, reply string, request *user.UserLookupRequest) {
+	if _, err = conn.QueueSubscribe(*natsSubject, *natsQueue, func(subject, reply string, request *user.UserLookupRequest) {
 		var svcerr svcerror.Error
 		var err error
 
@@ -240,8 +206,10 @@ func main() {
 				ErrorCode: svcerror.Code_BAD_REQUEST,
 				Message:   fmt.Sprintf("lookup type %T not known", x),
 			}
-			log.Error(svcerr)
-			conn.Publish(reply, &svcerr)
+			log.Error(&svcerr)
+			if err = conn.Publish(reply, &svcerr); err != nil {
+				log.Error(err)
+			}
 			return
 		}
 
@@ -274,7 +242,9 @@ func main() {
 				ErrorCode: svcerror.Code_INTERNAL,
 				Message:   err.Error(),
 			}
-			conn.Publish(reply, &svcerr)
+			if err = conn.Publish(reply, &svcerr); err != nil {
+				log.Error(err)
+			}
 			return
 		}
 
@@ -288,8 +258,10 @@ func main() {
 				ErrorCode: svcerror.Code_INTERNAL,
 				Message:   err.Error(),
 			}
-			log.Error(svcerr)
-			conn.Publish(reply, &svcerr)
+			log.Error(&svcerr)
+			if err = conn.Publish(reply, &svcerr); err != nil {
+				log.Error(err)
+			}
 			return
 		}
 
@@ -318,8 +290,10 @@ func main() {
 					ErrorCode: svcerror.Code_INTERNAL,
 					Message:   err.Error(),
 				}
-				log.Error(svcerr)
-				conn.Publish(reply, &svcerr)
+				log.Error(&svcerr)
+				if err = conn.Publish(reply, &svcerr); err != nil {
+					log.Error(err)
+				}
 				return
 			}
 
@@ -348,8 +322,10 @@ func main() {
 					ErrorCode: svcerror.Code_INTERNAL,
 					Message:   err.Error(),
 				}
-				log.Error(svcerr)
-				conn.Publish(reply, &svcerr)
+				log.Error(&svcerr)
+				if err = conn.Publish(reply, &svcerr); err != nil {
+					log.Error(err)
+				}
 				return
 			}
 
@@ -360,7 +336,9 @@ func main() {
 			log.Error(err)
 		}
 
-	})
+	}); err != nil {
+		log.Fatal(err)
+	}
 
 	select {}
 }

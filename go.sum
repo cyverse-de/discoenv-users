@@ -61,14 +61,10 @@ github.com/cyverse-de/configurate v0.0.0-20220113221928-13d34aae3f0f h1:AK5QLVfw
 github.com/cyverse-de/configurate v0.0.0-20220113221928-13d34aae3f0f/go.mod h1:WHo3kihlw77gqpWScUucrBgAV0t63mkoc3uD6GXnMBo=
 github.com/cyverse-de/go-mod/logging v0.0.1 h1:i+AmnzxVL2HPsvvBiG0qHR3Uov3w0+JxuN2f74yKaKE=
 github.com/cyverse-de/go-mod/logging v0.0.1/go.mod h1:KkvW+/cMUdkfsJAD3uqMxHEb5naX8bwnO6z8znqHILQ=
+github.com/cyverse-de/go-mod/protobufjson v0.0.1 h1:t5qx4xzgbhgdVUT3734w/nsPyF2anP+EQ2kmqomydSs=
+github.com/cyverse-de/go-mod/protobufjson v0.0.1/go.mod h1:p/ASemjpl2GEFYb3Tt7N8RozViwonsK0fOm0LxYeCt8=
 github.com/cyverse-de/p/go/svcerror v0.0.2 h1:dO4+LtKrU8gLge1JC9cBum0xMu7eR3xTRLEorX/YI7s=
 github.com/cyverse-de/p/go/svcerror v0.0.2/go.mod h1:eEon1TsHGP4GFY0H7DHovWh9WGN6KR0v25kq0RUV4QE=
-github.com/cyverse-de/p/go/user v0.0.1 h1:6tMWsAqSNxWHGxTN4FxjgV9CcK1iZLUJ5h47u5T8b7A=
-github.com/cyverse-de/p/go/user v0.0.1/go.mod h1:O/wIzMI2v0fDwqbHjZMaZF1go40qyz+qiKKWRCuTzMw=
-github.com/cyverse-de/p/go/user v0.0.3 h1:gwGiKZUQyeXwlOVqGUOTPXf1V6jS9KRzFCcashCe6I4=
-github.com/cyverse-de/p/go/user v0.0.3/go.mod h1:O/wIzMI2v0fDwqbHjZMaZF1go40qyz+qiKKWRCuTzMw=
-github.com/cyverse-de/p/go/user v0.0.4 h1:htFuDT9pvRpJ5IFLaw6FJRfibJI0vJ3Kdr59oXJFqes=
-github.com/cyverse-de/p/go/user v0.0.4/go.mod h1:O/wIzMI2v0fDwqbHjZMaZF1go40qyz+qiKKWRCuTzMw=
 github.com/cyverse-de/p/go/user v0.0.5 h1:1Df1mKK64/RihlMH/Ai6woZn9rLgX0ad+rM05403d1k=
 github.com/cyverse-de/p/go/user v0.0.5/go.mod h1:O/wIzMI2v0fDwqbHjZMaZF1go40qyz+qiKKWRCuTzMw=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
