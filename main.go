@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/cyverse-de/configurate"
@@ -18,10 +20,195 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"go.opentelemetry.io/otel"
+	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
+	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var log = logging.Log.WithFields(logrus.Fields{"service": "discoenv-users-service"})
+
+// NATSMessageHandler is the handler type that we support. Should map to the nats.Handler
+// function signature func(*nats.Msg).
+type NATSMessageHandler func(context.Context, *nats.Msg)
+
+type NATSTextMapCarrier struct {
+	nats.Header
+}
+
+func (n NATSTextMapCarrier) Keys() []string {
+	var keys []string
+	for key := range n.Header {
+		keys = append(keys, key)
+	}
+	return keys
+}
+
+func ProtoUnmarshal(data []byte, ptr interface{}) error {
+	if _, ok := ptr.(*interface{}); ok {
+		return nil
+	}
+
+	msg, ok := ptr.(proto.Message)
+	if !ok {
+		return errors.New("invalid protocol buffer message passed to ProtoUnmarshal")
+	}
+
+	return protojson.Unmarshal(data, msg)
+}
+
+// func ProtoMarshal(ptr interface{}) ([]byte, error) {
+// 	msg, ok := ptr.(proto.Message)
+// 	if !ok {
+// 		return nil, errors.New("invalid protocol buffer message passed to ProtoMarshal")
+// 	}
+// 	b, err := protojson.Marshal(msg)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	return b, nil
+// }
+
+type NATSOtelEncodedConnection struct {
+	nats.EncodedConn
+	OtelInstrumentationName string
+	OtelSystem              string
+	OtelProtocol            string
+	OtelProtocolVersion     string
+}
+
+// Middleware adds trace info to the message headers. Only accepts
+// nats.Handler of the form func(*nats.Msg) for now. Anything else will
+// bypass the telemetry logic.
+func (ec *NATSOtelEncodedConnection) Middleware(ctx context.Context, next NATSMessageHandler) NATSMessageHandler {
+	return func(ctx context.Context, msg *nats.Msg) {
+		headerCarrier := NATSTextMapCarrier{
+			msg.Header,
+		}
+		msgCtx := otel.GetTextMapPropagator().Extract(ctx, headerCarrier)
+		tracer := otel.GetTracerProvider().Tracer(ec.OtelInstrumentationName)
+		msgCtx, span := tracer.Start(msgCtx, msg.Subject+" process", trace.WithSpanKind(trace.SpanKindConsumer))
+		defer span.End()
+
+		span.SetAttributes(
+			semconv.MessagingSystemKey.String(ec.OtelSystem),
+			semconv.MessagingProtocolKey.String(ec.OtelProtocol),
+			semconv.MessagingProtocolVersionKey.String(ec.OtelProtocolVersion),
+			semconv.MessagingDestinationKindTopic.Key.String(msg.Subject),
+			semconv.MessagingOperationKey.String("process"),
+		)
+		next(msgCtx, msg)
+	}
+}
+
+func NewNATSOtelEncodedConnection(encConn *nats.EncodedConn, instr, system, proto, protoVersion string) *NATSOtelEncodedConnection {
+	return &NATSOtelEncodedConnection{
+		EncodedConn:             *encConn,
+		OtelInstrumentationName: instr,
+		OtelSystem:              system,
+		OtelProtocol:            proto,
+		OtelProtocolVersion:     protoVersion,
+	}
+}
+
+func (ec *NATSOtelEncodedConnection) QueueSubscribeContext(ctx context.Context, subject, queue string, handler NATSMessageHandler) (*nats.Subscription, error) {
+	constructedHandler := func(msg *nats.Msg) {
+		handler(ctx, msg)
+	}
+	return ec.QueueSubscribe(subject, queue, constructedHandler)
+}
+
+func (ec *NATSOtelEncodedConnection) setupMsg(ctx context.Context, subject string, v interface{}) (*nats.Msg, error) {
+	var (
+		tracer trace.Tracer
+		outMsg *nats.Msg
+	)
+
+	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
+		tracer = span.TracerProvider().Tracer(ec.OtelInstrumentationName)
+	} else {
+		tracer = otel.GetTracerProvider().Tracer(ec.OtelInstrumentationName)
+	}
+
+	ctx, span := tracer.Start(ctx, subject+" send", trace.WithSpanKind(trace.SpanKindProducer))
+	defer span.End()
+
+	span.SetAttributes(
+		semconv.MessagingSystemKey.String(ec.OtelSystem),
+		semconv.MessagingProtocolKey.String(ec.OtelProtocol),
+		semconv.MessagingProtocolVersionKey.String(ec.OtelProtocolVersion),
+		semconv.MessagingDestinationKindTopic.Key.String(subject),
+	)
+
+	var msgHeaders nats.Header
+
+	otel.GetTextMapPropagator().Inject(ctx, NATSTextMapCarrier{msgHeaders})
+
+	encodedData, err := ec.Enc.Encode(subject, v)
+	if err != nil {
+		return nil, err
+	}
+
+	outMsg = nats.NewMsg(subject)
+	outMsg.Header = msgHeaders
+	outMsg.Data = encodedData
+
+	return outMsg, nil
+}
+
+func (ec *NATSOtelEncodedConnection) PublishContext(ctx context.Context, subject string, v interface{}) error {
+	outMsg, err := ec.setupMsg(ctx, subject, v)
+	if err != nil {
+		return err
+	}
+
+	// Use Conn here instead of ec.EncodedConn since we already encoded the message.
+	if err = ec.Conn.PublishMsg(outMsg); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (ec *NATSOtelEncodedConnection) PublishRequestContext(ctx context.Context, subject, reply string, v interface{}) error {
+	outMsg, err := ec.setupMsg(ctx, subject, v)
+	if err != nil {
+		return err
+	}
+
+	outMsg.Reply = reply
+
+	// Use Conn here instead of ec.EncodedConn since we already encoded the message.
+	if err = ec.Conn.PublishMsg(outMsg); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Parts of this are taken from the NATS source.
+var emptyMsgType = reflect.TypeOf(&nats.Msg{})
+
+func (ec *NATSOtelEncodedConnection) RequestContext(ctx context.Context, subject string, v, vPtr interface{}, timeout time.Duration) error {
+	outMsg, err := ec.setupMsg(ctx, subject, v)
+	if err != nil {
+		return err
+	}
+	inMsg, err := ec.Conn.RequestMsg(outMsg, timeout)
+	if err != nil {
+		return err
+	}
+	if reflect.TypeOf(vPtr) == emptyMsgType {
+		// If the pointer is to an empty message,
+		// return the incoming message without decoding it.
+		mPtr := vPtr.(*nats.Msg)
+		*mPtr = *inMsg
+	} else {
+		err = ec.Enc.Decode(inMsg.Subject, inMsg.Data, vPtr)
+	}
+	return err
+}
 
 type lookupUser struct {
 	Username        string `db:"username"`
@@ -166,9 +353,19 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if _, err = conn.QueueSubscribe(*natsSubject, *natsQueue, func(subject, reply string, request *user.UserLookupRequest) {
-		var svcerr svcerror.Error
-		var err error
+	otconn := NewNATSOtelEncodedConnection(conn, "github.com/cyverse-de/discoenv-users", "NATS", "NATS", "2.8")
+
+	ctx := context.Background()
+
+	handler := otconn.Middleware(ctx, func(ctx context.Context, msg *nats.Msg) {
+		var (
+			err     error
+			request *user.UserLookupRequest
+			svcerr  svcerror.Error
+		)
+		if err = ProtoUnmarshal(msg.Data, request); err != nil {
+			log.Error(err)
+		}
 
 		usersT := goqu.T("users")
 		jobsT := goqu.T("jobs")
@@ -207,7 +404,7 @@ func main() {
 				Message:   fmt.Sprintf("lookup type %T not known", x),
 			}
 			log.Error(&svcerr)
-			if err = conn.Publish(reply, &svcerr); err != nil {
+			if err = conn.Publish(msg.Reply, &svcerr); err != nil {
 				log.Error(err)
 			}
 			return
@@ -242,7 +439,7 @@ func main() {
 				ErrorCode: svcerror.Code_INTERNAL,
 				Message:   err.Error(),
 			}
-			if err = conn.Publish(reply, &svcerr); err != nil {
+			if err = conn.Publish(msg.Reply, &svcerr); err != nil {
 				log.Error(err)
 			}
 			return
@@ -259,7 +456,7 @@ func main() {
 				Message:   err.Error(),
 			}
 			log.Error(&svcerr)
-			if err = conn.Publish(reply, &svcerr); err != nil {
+			if err = conn.Publish(msg.Reply, &svcerr); err != nil {
 				log.Error(err)
 			}
 			return
@@ -291,7 +488,7 @@ func main() {
 					Message:   err.Error(),
 				}
 				log.Error(&svcerr)
-				if err = conn.Publish(reply, &svcerr); err != nil {
+				if err = conn.Publish(msg.Reply, &svcerr); err != nil {
 					log.Error(err)
 				}
 				return
@@ -323,7 +520,7 @@ func main() {
 					Message:   err.Error(),
 				}
 				log.Error(&svcerr)
-				if err = conn.Publish(reply, &svcerr); err != nil {
+				if err = conn.Publish(msg.Reply, &svcerr); err != nil {
 					log.Error(err)
 				}
 				return
@@ -332,11 +529,12 @@ func main() {
 			responseUser.LoginCount = uint32(loginCount)
 		}
 
-		if err = conn.Publish(reply, &responseUser); err != nil {
+		if err = conn.Publish(msg.Reply, &responseUser); err != nil {
 			log.Error(err)
 		}
+	})
 
-	}); err != nil {
+	if _, err = otconn.QueueSubscribeContext(ctx, *natsSubject, *natsQueue, handler); err != nil {
 		log.Fatal(err)
 	}
 
