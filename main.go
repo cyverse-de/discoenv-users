@@ -363,6 +363,7 @@ func main() {
 			request *user.UserLookupRequest
 			svcerr  svcerror.Error
 		)
+		request = &user.UserLookupRequest{}
 		if err = ProtoUnmarshal(msg.Data, request); err != nil {
 			log.Error(err)
 		}
