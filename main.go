@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/cyverse-de/configurate"
+	"github.com/cyverse-de/go-mod/gotelnats"
 	"github.com/cyverse-de/go-mod/logging"
 	"github.com/cyverse-de/go-mod/protobufjson"
 	"github.com/jmoiron/sqlx"
@@ -12,6 +13,9 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"github.com/uptrace/opentelemetry-go-extra/otelsql"
+	"github.com/uptrace/opentelemetry-go-extra/otelsqlx"
+	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
 )
 
 var log = logging.Log.WithFields(logrus.Fields{"service": "discoenv-users-service"})
@@ -35,6 +39,15 @@ func main() {
 		logLevel      = flag.String("log-level", "info", "One of trace, debug, info, warn, error, fatal, or panic.")
 	)
 
+	if gotelnats.OtelEnabled() {
+		cancel, shutdown, err := gotelnats.SetupTraceProvider()
+		defer cancel()
+		defer shutdown()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
 	flag.Parse()
 	logging.SetupLogging(*logLevel)
 
@@ -51,7 +64,11 @@ func main() {
 		log.Fatal("db.uri must be set in the configuration file")
 	}
 
-	dbconn = sqlx.MustConnect("postgres", dbURI)
+	dbconn = otelsqlx.MustConnect(
+		"postgres",
+		dbURI,
+		otelsql.WithAttributes(semconv.DBSystemPostgreSQL),
+	)
 	log.Info("done connecting to the database")
 
 	log.Infof("NATS URL is %s", *natsURL)
