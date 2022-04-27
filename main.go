@@ -1,12 +1,13 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"time"
 
 	"github.com/cyverse-de/configurate"
-	"github.com/cyverse-de/go-mod/gotelnats"
 	"github.com/cyverse-de/go-mod/logging"
+	"github.com/cyverse-de/go-mod/otelutils"
 	"github.com/cyverse-de/go-mod/protobufjson"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
@@ -19,6 +20,8 @@ import (
 )
 
 var log = logging.Log.WithFields(logrus.Fields{"service": "discoenv-users-service"})
+
+const serviceName = "discoenv-users"
 
 func main() {
 	var (
@@ -39,14 +42,10 @@ func main() {
 		logLevel      = flag.String("log-level", "info", "One of trace, debug, info, warn, error, fatal, or panic.")
 	)
 
-	if gotelnats.OtelEnabled() {
-		cancel, shutdown, err := gotelnats.SetupTraceProvider()
-		defer cancel()
-		defer shutdown()
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
+	tracerCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	shutdown := otelutils.TracerProviderFromEnv(tracerCtx, serviceName, func(e error) { log.Fatal(e) })
+	defer shutdown()
 
 	flag.Parse()
 	logging.SetupLogging(*logLevel)
