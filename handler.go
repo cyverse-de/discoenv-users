@@ -32,7 +32,7 @@ type lookupLogin struct {
 	LogoutTime sql.NullTime   `db:"logout_time"`
 }
 
-func lookupLogins(dbconn *sqlx.DB, userID string, limit, offset uint) ([]lookupLogin, error) {
+func lookupLogins(ctx context.Context, dbconn *sqlx.DB, userID string, limit, offset uint) ([]lookupLogin, error) {
 	var err error
 
 	usersT := goqu.T("users")
@@ -55,7 +55,7 @@ func lookupLogins(dbconn *sqlx.DB, userID string, limit, offset uint) ([]lookupL
 		return nil, err
 	}
 
-	rows, err := dbconn.QueryxContext(context.Background(), loginsQueryString)
+	rows, err := dbconn.QueryxContext(ctx, loginsQueryString)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +74,7 @@ func lookupLogins(dbconn *sqlx.DB, userID string, limit, offset uint) ([]lookupL
 	return logins, nil
 }
 
-func loginCount(dbconn *sqlx.DB, userID string) (uint, error) {
+func loginCount(ctx context.Context, dbconn *sqlx.DB, userID string) (uint, error) {
 	var err error
 
 	usersT := goqu.T("users")
@@ -89,7 +89,7 @@ func loginCount(dbconn *sqlx.DB, userID string) (uint, error) {
 	}
 
 	var count uint
-	if err = dbconn.QueryRowxContext(context.Background(), q).Scan(&count); err != nil {
+	if err = dbconn.QueryRowxContext(ctx, q).Scan(&count); err != nil {
 		return count, err
 	}
 	return count, nil
@@ -176,7 +176,7 @@ func getHandler(conn *nats.EncodedConn, dbconn *sqlx.DB) nats.Handler {
 		u := lookupUser{}
 
 		// argument handling is done by the goqu library above.
-		if err = dbconn.QueryRowxContext(context.Background(), queryString).StructScan(&u); err != nil {
+		if err = dbconn.QueryRowxContext(ctx, queryString).StructScan(&u); err != nil {
 			handleError(ctx, err, svcerror.Code_INTERNAL, reply, conn)
 		}
 
@@ -195,6 +195,7 @@ func getHandler(conn *nats.EncodedConn, dbconn *sqlx.DB) nats.Handler {
 
 		if request.IncludeLogins {
 			logins, err := lookupLogins(
+				ctx,
 				dbconn,
 				u.UserID,
 				uint(request.LoginLimit),
@@ -223,7 +224,7 @@ func getHandler(conn *nats.EncodedConn, dbconn *sqlx.DB) nats.Handler {
 				responseUser.Logins = append(responseUser.Logins, &ul)
 			}
 
-			loginCount, err := loginCount(dbconn, u.UserID)
+			loginCount, err := loginCount(ctx, dbconn, u.UserID)
 			if err != nil {
 				handleError(ctx, err, svcerror.Code_INTERNAL, reply, conn)
 			}
