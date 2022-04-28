@@ -31,6 +31,7 @@ func main() {
 
 		natsURL       = flag.String("nats", "tls://nats:4222", "NATS connection URL")
 		configPath    = flag.String("config", "/etc/iplant/de/jobservices.yml", "The path to the config file")
+		maxDBConns    = flag.Int("max-db-conns", 10, "Sets the maximum number of open database connections")
 		tlsCert       = flag.String("tlscert", "/etc/nats/tls.crt", "Path to the TLS cert used for the NATS connection")
 		tlsKey        = flag.String("tlskey", "/etc/nats/tls.key", "Path to the TLS key used for the NATS connection")
 		caCert        = flag.String("tlsca", "/etc/nats/ca.crt", "Path to the TLS CA cert used for the NATS connection")
@@ -68,6 +69,7 @@ func main() {
 		dbURI,
 		otelsql.WithAttributes(semconv.DBSystemPostgreSQL),
 	)
+	dbconn.SetMaxOpenConns(*maxDBConns)
 	log.Info("done connecting to the database")
 
 	log.Infof("NATS URL is %s", *natsURL)
