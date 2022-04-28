@@ -19,9 +19,9 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
 )
 
-var log = logging.Log.WithFields(logrus.Fields{"service": "discoenv-users-service"})
-
 const serviceName = "discoenv-users"
+
+var log = logging.Log.WithFields(logrus.Fields{"service": serviceName})
 
 func main() {
 	var (
