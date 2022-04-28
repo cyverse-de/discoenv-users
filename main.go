@@ -42,13 +42,13 @@ func main() {
 		logLevel      = flag.String("log-level", "info", "One of trace, debug, info, warn, error, fatal, or panic.")
 	)
 
+	flag.Parse()
+	logging.SetupLogging(*logLevel)
+
 	tracerCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	shutdown := otelutils.TracerProviderFromEnv(tracerCtx, serviceName, func(e error) { log.Fatal(e) })
 	defer shutdown()
-
-	flag.Parse()
-	logging.SetupLogging(*logLevel)
 
 	nats.RegisterEncoder("protojson", &protobufjson.Codec{})
 
