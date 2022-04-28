@@ -19,6 +19,7 @@ require (
 	github.com/uptrace/opentelemetry-go-extra/otelsql v0.1.12
 	github.com/uptrace/opentelemetry-go-extra/otelsqlx v0.1.12
 	go.opentelemetry.io/otel v1.6.3
+	go.opentelemetry.io/otel/trace v1.6.3
 	google.golang.org/protobuf v1.28.0
 )
 
@@ -46,7 +47,6 @@ require (
 	go.opentelemetry.io/otel/exporters/jaeger v1.6.3 // indirect
 	go.opentelemetry.io/otel/metric v0.29.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.6.3 // indirect
-	go.opentelemetry.io/otel/trace v1.6.3 // indirect
 	golang.org/x/crypto v0.0.0-20220315160706-3147a52a75dd // indirect
 	golang.org/x/sys v0.0.0-20220403205710-6acee93ad0eb // indirect
 	golang.org/x/text v0.3.7 // indirect

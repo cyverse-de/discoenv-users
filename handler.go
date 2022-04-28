@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 
 	"github.com/cyverse-de/go-mod/gotelnats"
@@ -13,7 +12,6 @@ import (
 	"github.com/nats-io/nats.go"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type lookupUser struct {
@@ -27,80 +25,110 @@ type lookupUser struct {
 	SavedSearchesID string `db:"saved_searches_id"`
 }
 
-type lookupLogin struct {
-	IPAddress  sql.NullString `db:"ip_address"`
-	UserAgent  sql.NullString `db:"user_agent"`
-	LoginTime  sql.NullTime   `db:"login_time"`
-	LogoutTime sql.NullTime   `db:"logout_time"`
-}
-
-func lookupLogins(ctx context.Context, dbconn *sqlx.DB, userID string, limit, offset uint) ([]lookupLogin, error) {
-	var err error
+// addLookupSQL will add the SQL that selects the individual user
+// and returns the parameter value passed in that identifies them.
+func addLookupSQL(q *goqu.SelectDataset, request *user.UserLookupRequest) (*goqu.SelectDataset, string, error) {
+	var (
+		err   error
+		param string
+	)
 
 	usersT := goqu.T("users")
-	loginsT := goqu.T("logins")
-	loginsQ := goqu.From(loginsT).
-		Join(usersT, goqu.On(loginsT.Col("user_id").Eq(usersT.Col("id")))).
-		Where(usersT.Col("id").Eq(userID)).
-		Select(
-			loginsT.Col("ip_address"),
-			loginsT.Col("user_agent"),
-			loginsT.Col("login_time"),
-			loginsT.Col("logout_time"),
-		).
-		Order(loginsT.Col("login_time").Desc()).
-		Limit(limit).
-		Offset(offset)
+	jobsT := goqu.T("jobs")
 
-	loginsQueryString, _, err := loginsQ.ToSQL()
-	if err != nil {
-		return nil, err
+	switch x := request.LookupIds.(type) {
+	case *user.UserLookupRequest_AnalysisId:
+		param = request.GetAnalysisId()
+
+		q = q.
+			Join(jobsT, goqu.On(usersT.Col("id").Eq(jobsT.Col("user_id")))).
+			Where(jobsT.Col("id").Eq("?"))
+
+	case *user.UserLookupRequest_Username:
+		param = request.GetUsername()
+		q = q.Where(usersT.Col("username").Eq("?"))
+
+	case *user.UserLookupRequest_UserId:
+		param = request.GetUserId()
+		q = q.Where(usersT.Col("id").Eq("?"))
+
+	default:
+		err = fmt.Errorf("lookup type %T not known", x)
+		return nil, "", err
 	}
 
-	rows, err := dbconn.QueryxContext(ctx, loginsQueryString)
-	if err != nil {
-		return nil, err
-	}
-
-	logins := []lookupLogin{}
-
-	for rows.Next() {
-		login := lookupLogin{}
-		if err = rows.StructScan(&login); err != nil {
-			return nil, err
-		}
-
-		logins = append(logins, login)
-	}
-
-	return logins, nil
+	return q, param, nil
 }
 
-func loginCount(ctx context.Context, dbconn *sqlx.DB, userID string) (uint, error) {
-	var err error
+// buildQuery returns a query constructed based on the *user.UserLookupRequest passed in and
+// returns 3 values, the *goqu.SelectDataset, a list of arguments for the quest, and any errors
+// returned
+func buildQuery(request *user.UserLookupRequest) (*goqu.SelectDataset, []interface{}, error) {
+	var (
+		err         error
+		userIDParam string
+		args        []interface{}
+	)
 
 	usersT := goqu.T("users")
-	loginsT := goqu.T("logins")
-	countQ := goqu.From(loginsT).
-		Join(usersT, goqu.On(loginsT.Col("user_id").Eq(usersT.Col("id")))).
-		Where(usersT.Col("id").Eq(userID)).
-		Select(goqu.COUNT("*"))
-	q, _, err := countQ.ToSQL()
-	if err != nil {
-		return 0, err
+	savedSearchesT := goqu.T("user_saved_searches")
+	prefsT := goqu.T("user_preferences")
+
+	q := goqu.From(usersT)
+
+	if request.IncludeSavedSearches {
+		q = q.Join(savedSearchesT, goqu.On(usersT.Col("id").Eq(savedSearchesT.Col("user_id"))))
 	}
 
-	var count uint
-	if err = dbconn.QueryRowxContext(ctx, q).Scan(&count); err != nil {
-		return count, err
+	if request.IncludePreferences {
+		q = q.Join(prefsT, goqu.On(usersT.Col("id").Eq(prefsT.Col("user_id"))))
 	}
-	return count, nil
+
+	q, userIDParam, err = addLookupSQL(q, request)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	args = append(args, userIDParam)
+
+	selectFields := []interface{}{
+		usersT.Col("id"),
+		usersT.Col("username"),
+	}
+
+	if request.IncludeSavedSearches {
+		selectFields = append(
+			selectFields,
+			savedSearchesT.Col("id").As("saved_searches_id"),
+			savedSearchesT.Col("saved_searches").As("saved_searches"),
+		)
+	}
+
+	if request.IncludePreferences {
+		selectFields = append(
+			selectFields,
+			prefsT.Col("id").As("preferences_id"),
+			prefsT.Col("preferences").As("preferences"),
+		)
+	}
+
+	q = q.Select(selectFields...)
+
+	return q, args, nil
 }
 
+// getHandler returns a nats.Handler that will look up user information
+// based on the incoming UserLookupRequest and will send a response
+// in the form of a user.User message on the reply subject.
 func getHandler(conn *nats.EncodedConn, dbconn *sqlx.DB) nats.Handler {
 	return func(subject, reply string, request *user.UserLookupRequest) {
-		var err error
+		var (
+			err  error
+			args []interface{}
+			q    *goqu.SelectDataset
+		)
 
+		// Set up telemetry tracking
 		carrier := gotelnats.PBTextMapCarrier{
 			Header: request.Header,
 		}
@@ -108,65 +136,14 @@ func getHandler(conn *nats.EncodedConn, dbconn *sqlx.DB) nats.Handler {
 		ctx, span := gotelnats.StartSpan(&carrier, subject, gotelnats.Process)
 		defer span.End()
 
-		usersT := goqu.T("users")
-		jobsT := goqu.T("jobs")
-		savedSearchesT := goqu.T("user_saved_searches")
-		prefsT := goqu.T("user_preferences")
-
-		q := goqu.From(usersT)
-
 		log.Infof("%+v\n", request)
 
-		if request.IncludeSavedSearches {
-			q = q.Join(savedSearchesT, goqu.On(usersT.Col("id").Eq(savedSearchesT.Col("user_id"))))
-		}
-
-		if request.IncludePreferences {
-			q = q.Join(prefsT, goqu.On(usersT.Col("id").Eq(prefsT.Col("user_id"))))
-		}
-
-		switch x := request.LookupIds.(type) {
-		case *user.UserLookupRequest_AnalysisId:
-			analysisID := request.GetAnalysisId()
-
-			q = q.
-				Join(jobsT, goqu.On(usersT.Col("id").Eq(jobsT.Col("user_id")))).
-				Where(jobsT.Col("id").Eq(analysisID))
-
-		case *user.UserLookupRequest_Username:
-			q = q.Where(usersT.Col("username").Eq(request.GetUsername()))
-
-		case *user.UserLookupRequest_UserId:
-			q = q.Where(usersT.Col("id").Eq(request.GetUserId()))
-
-		default:
-			lookupErr := fmt.Errorf("lookup type %T not known", x)
-			handleError(ctx, lookupErr, svcerror.Code_BAD_REQUEST, reply, conn)
+		// Build the query
+		q, args, err = buildQuery(request)
+		if err != nil {
+			handleError(ctx, err, svcerror.Code_BAD_REQUEST, reply, conn)
 			return
 		}
-
-		selectFields := []interface{}{
-			usersT.Col("id"),
-			usersT.Col("username"),
-		}
-
-		if request.IncludeSavedSearches {
-			selectFields = append(
-				selectFields,
-				savedSearchesT.Col("id").As("saved_searches_id"),
-				savedSearchesT.Col("saved_searches").As("saved_searches"),
-			)
-		}
-
-		if request.IncludePreferences {
-			selectFields = append(
-				selectFields,
-				prefsT.Col("id").As("preferences_id"),
-				prefsT.Col("preferences").As("preferences"),
-			)
-		}
-
-		q = q.Select(selectFields...)
 
 		queryString, _, err := q.ToSQL()
 		if err != nil {
@@ -175,14 +152,15 @@ func getHandler(conn *nats.EncodedConn, dbconn *sqlx.DB) nats.Handler {
 
 		log.Infof("%s\n", queryString)
 
+		// Execute the query
 		u := lookupUser{}
 
-		// argument handling is done by the goqu library above.
-		if err = dbconn.QueryRowxContext(ctx, queryString).StructScan(&u); err != nil {
+		if err = dbconn.QueryRowxContext(ctx, queryString, args...).StructScan(&u); err != nil {
 			handleError(ctx, err, svcerror.Code_INTERNAL, reply, conn)
 		}
 
-		responseUser := user.User{
+		// Build up the response data
+		responseUser := &user.User{
 			Uuid:     u.UserID,
 			Username: u.Username,
 			Preferences: &user.User_Preferences{
@@ -196,45 +174,14 @@ func getHandler(conn *nats.EncodedConn, dbconn *sqlx.DB) nats.Handler {
 		}
 
 		if request.IncludeLogins {
-			logins, err := lookupLogins(
-				ctx,
-				dbconn,
-				u.UserID,
-				uint(request.LoginLimit),
-				uint(request.LoginOffset),
-			)
+			responseUser, err = addLogins(ctx, responseUser, request, dbconn)
 			if err != nil {
 				handleError(ctx, err, svcerror.Code_INTERNAL, reply, conn)
 			}
-
-			responseUser.Logins = []*user.User_Login{}
-
-			for _, login := range logins {
-				ul := user.User_Login{}
-				if login.IPAddress.Valid {
-					ul.IpAddress = login.IPAddress.String
-				}
-				if login.UserAgent.Valid {
-					ul.UserAgent = login.UserAgent.String
-				}
-				if login.LoginTime.Valid {
-					ul.LoginTime = timestamppb.New(login.LoginTime.Time)
-				}
-				if login.LogoutTime.Valid {
-					ul.LogoutTime = timestamppb.New(login.LogoutTime.Time)
-				}
-				responseUser.Logins = append(responseUser.Logins, &ul)
-			}
-
-			loginCount, err := loginCount(ctx, dbconn, u.UserID)
-			if err != nil {
-				handleError(ctx, err, svcerror.Code_INTERNAL, reply, conn)
-			}
-
-			responseUser.LoginCount = uint32(loginCount)
 		}
 
-		if err = publishResponse(ctx, conn, reply, &responseUser); err != nil {
+		// Publish the response
+		if err = publishResponse(ctx, conn, reply, responseUser); err != nil {
 			log.Error(err)
 		}
 	}
