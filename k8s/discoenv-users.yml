@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: discoenv-users
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      de-app: discoenv-users
+  template:
+    metadata:
+      labels:
+        de-app: discoenv-users
+        app: de
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: de-app
+                operator: In
+                values:
+                - discoenv-users
+            topologyKey: kubernetes.io/hostname
+      restartPolicy: Always
+      volumes:
+        - name: localtime
+          hostPath:
+            path: /etc/localtime
+        - name: timezone
+          configMap:
+            name: timezone
+            items:
+              - key: timezone
+                path: timezone
+        - name: service-configs
+          secret:
+            secretName: service-configs
+            items:
+              - key: jobservices.yml
+                path: jobservices.yml
+      containers:
+      - name: discoenv-users
+        image: harbor.cyverse.org/de/discoenv-users
+        resources:
+          requests:
+            cpu: "1m"
+            memory: "128Mi"
+          limits:
+            cpu: "100m"
+            memory: "256Mi"
+        args:
+          - --log-level
+          - debug
+        env:
+          - name: OTEL_TRACES_EXPORTER
+            valueFrom:
+              secretKeyRef:
+                name: configs
+                key: OTEL_TRACES_EXPORTER
+          - name: OTEL_EXPORTER_JAEGER_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: configs
+                key: OTEL_EXPORTER_JAEGER_HTTP_ENDPOINT
+        ports:
+          - name: listen-port
+            containerPort: 60000
+        volumeMounts:
+          - name: localtime
+            mountPath: /etc/localtime
+            readOnly: true
+          - name: timezone
+            mountPath: /etc/timezone
+            subPath: timezone
+          - name: service-configs
+            mountPath: /etc/iplant/de
+            readOnly: true
+          
