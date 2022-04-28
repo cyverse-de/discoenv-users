@@ -11,6 +11,8 @@ import (
 	"github.com/doug-martin/goqu/v9"
 	"github.com/jmoiron/sqlx"
 	"github.com/nats-io/nats.go"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -250,6 +252,10 @@ func publishResponse(ctx context.Context, conn *nats.EncodedConn, reply string, 
 }
 
 func handleError(ctx context.Context, err error, code svcerror.Code, reply string, conn *nats.EncodedConn) {
+	span := trace.SpanFromContext(ctx) // or pass the span into handleError
+	span.RecordError(err)
+	span.SetStatus(codes.Error, err.Error())
+
 	svcerr := svcerror.Error{
 		ErrorCode: code,
 		Message:   err.Error(),
@@ -261,7 +267,7 @@ func handleError(ctx context.Context, err error, code svcerror.Code, reply strin
 		Header: svcerr.Header,
 	}
 
-	_, span := gotelnats.InjectSpan(ctx, &carrier, reply, gotelnats.Send)
+	_, span = gotelnats.InjectSpan(ctx, &carrier, reply, gotelnats.Send)
 	defer span.End()
 
 	if err = conn.Publish(reply, &svcerr); err != nil {
