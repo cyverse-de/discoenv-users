@@ -182,7 +182,7 @@ func getHandler(conn *nats.EncodedConn, dbconn *sqlx.DB) nats.Handler {
 			handleError(ctx, err, svcerror.Code_INTERNAL, reply, conn)
 		}
 
-		responseUser := user.User{
+		responseUser := &user.User{
 			Uuid:     u.UserID,
 			Username: u.Username,
 			Preferences: &user.User_Preferences{
@@ -234,7 +234,7 @@ func getHandler(conn *nats.EncodedConn, dbconn *sqlx.DB) nats.Handler {
 			responseUser.LoginCount = uint32(loginCount)
 		}
 
-		if err = publishResponse(ctx, conn, reply, &responseUser); err != nil {
+		if err = publishResponse(ctx, conn, reply, responseUser); err != nil {
 			log.Error(err)
 		}
 	}
@@ -248,7 +248,7 @@ func publishResponse(ctx context.Context, conn *nats.EncodedConn, reply string, 
 	_, span := gotelnats.InjectSpan(ctx, &carrier, reply, gotelnats.Send)
 	defer span.End()
 
-	return conn.Publish(reply, &responseUser)
+	return conn.Publish(reply, responseUser)
 }
 
 func handleError(ctx context.Context, err error, code svcerror.Code, reply string, conn *nats.EncodedConn) {
