@@ -11,8 +11,6 @@ import (
 	"github.com/doug-martin/goqu/v9"
 	"github.com/jmoiron/sqlx"
 	"github.com/nats-io/nats.go"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -101,6 +99,9 @@ func getHandler(conn *nats.EncodedConn, dbconn *sqlx.DB) nats.Handler {
 	return func(subject, reply string, request *user.UserLookupRequest) {
 		var err error
 
+		// Set this up early so that potential errors can be returned easily.
+		responseUser := &user.User{}
+
 		carrier := gotelnats.PBTextMapCarrier{
 			Header: request.Header,
 		}
@@ -141,7 +142,12 @@ func getHandler(conn *nats.EncodedConn, dbconn *sqlx.DB) nats.Handler {
 
 		default:
 			lookupErr := fmt.Errorf("lookup type %T not known", x)
-			handleError(ctx, lookupErr, svcerror.Code_BAD_REQUEST, reply, conn)
+			responseUser.Error = gotelnats.InitServiceError(ctx, lookupErr, &gotelnats.ErrorOptions{
+				ErrorCode: svcerror.ErrorCode_BAD_REQUEST,
+			})
+			if err = gotelnats.PublishResponse(ctx, conn, reply, responseUser); err != nil {
+				log.Error(err)
+			}
 			return
 		}
 
@@ -170,29 +176,46 @@ func getHandler(conn *nats.EncodedConn, dbconn *sqlx.DB) nats.Handler {
 
 		queryString, _, err := q.ToSQL()
 		if err != nil {
-			handleError(ctx, err, svcerror.Code_INTERNAL, reply, conn)
+			responseUser.Error = gotelnats.InitServiceError(ctx, err, &gotelnats.ErrorOptions{
+				ErrorCode: svcerror.ErrorCode_INTERNAL,
+			})
+			if err = gotelnats.PublishResponse(ctx, conn, reply, responseUser); err != nil {
+				log.Error(err)
+			}
+			return
 		}
 
-		log.Infof("%s\n", queryString)
+		log.Debugf("%s\n", queryString)
 
 		u := lookupUser{}
 
-		// argument handling is done by the goqu library above.
 		if err = dbconn.QueryRowxContext(ctx, queryString).StructScan(&u); err != nil {
-			handleError(ctx, err, svcerror.Code_INTERNAL, reply, conn)
+			errCode := svcerror.ErrorCode_INTERNAL
+
+			if err == sql.ErrNoRows {
+				errCode = svcerror.ErrorCode_NOT_FOUND
+			}
+
+			responseUser.Error = gotelnats.InitServiceError(ctx, err, &gotelnats.ErrorOptions{
+				ErrorCode: errCode,
+			})
+
+			if err = gotelnats.PublishResponse(ctx, conn, reply, responseUser); err != nil {
+				log.Error(err)
+			}
+
+			return
 		}
 
-		responseUser := &user.User{
-			Uuid:     u.UserID,
-			Username: u.Username,
-			Preferences: &user.User_Preferences{
-				Uuid:        u.PreferencesID,
-				Preferences: u.Preferences,
-			},
-			SavedSearches: &user.User_SavedSearches{
-				Uuid:          u.SavedSearchesID,
-				SavedSearches: u.SavedSearches,
-			},
+		responseUser.Uuid = u.UserID
+		responseUser.Username = u.Username
+		responseUser.Preferences = &user.User_Preferences{
+			Uuid:        u.PreferencesID,
+			Preferences: u.Preferences,
+		}
+		responseUser.SavedSearches = &user.User_SavedSearches{
+			Uuid:          u.SavedSearchesID,
+			SavedSearches: u.SavedSearches,
 		}
 
 		if request.IncludeLogins {
@@ -204,7 +227,13 @@ func getHandler(conn *nats.EncodedConn, dbconn *sqlx.DB) nats.Handler {
 				uint(request.LoginOffset),
 			)
 			if err != nil {
-				handleError(ctx, err, svcerror.Code_INTERNAL, reply, conn)
+				responseUser.Error = gotelnats.InitServiceError(ctx, err, &gotelnats.ErrorOptions{
+					ErrorCode: svcerror.ErrorCode_INTERNAL,
+				})
+				if err = gotelnats.PublishResponse(ctx, conn, reply, responseUser); err != nil {
+					log.Error(err)
+				}
+				return
 			}
 
 			responseUser.Logins = []*user.User_Login{}
@@ -228,49 +257,20 @@ func getHandler(conn *nats.EncodedConn, dbconn *sqlx.DB) nats.Handler {
 
 			loginCount, err := loginCount(ctx, dbconn, u.UserID)
 			if err != nil {
-				handleError(ctx, err, svcerror.Code_INTERNAL, reply, conn)
+				responseUser.Error = gotelnats.InitServiceError(ctx, err, &gotelnats.ErrorOptions{
+					ErrorCode: svcerror.ErrorCode_INTERNAL,
+				})
+				if err = gotelnats.PublishResponse(ctx, conn, reply, responseUser); err != nil {
+					log.Error(err)
+				}
+				return
 			}
 
 			responseUser.LoginCount = uint32(loginCount)
 		}
 
-		if err = publishResponse(ctx, conn, reply, responseUser); err != nil {
+		if err = gotelnats.PublishResponse(ctx, conn, reply, responseUser); err != nil {
 			log.Error(err)
 		}
-	}
-}
-
-func publishResponse(ctx context.Context, conn *nats.EncodedConn, reply string, responseUser *user.User) error {
-	carrier := gotelnats.PBTextMapCarrier{
-		Header: responseUser.Header,
-	}
-
-	_, span := gotelnats.InjectSpan(ctx, &carrier, reply, gotelnats.Send)
-	defer span.End()
-
-	return conn.Publish(reply, responseUser)
-}
-
-func handleError(ctx context.Context, err error, code svcerror.Code, reply string, conn *nats.EncodedConn) {
-	span := trace.SpanFromContext(ctx) // or pass the span into handleError
-	span.RecordError(err)
-	span.SetStatus(codes.Error, err.Error())
-
-	svcerr := svcerror.Error{
-		ErrorCode: code,
-		Message:   err.Error(),
-	}
-
-	log.Error(&svcerr)
-
-	carrier := gotelnats.PBTextMapCarrier{
-		Header: svcerr.Header,
-	}
-
-	_, span = gotelnats.InjectSpan(ctx, &carrier, reply, gotelnats.Send)
-	defer span.End()
-
-	if err = conn.Publish(reply, &svcerr); err != nil {
-		log.Error(err)
 	}
 }

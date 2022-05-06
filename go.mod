@@ -4,12 +4,12 @@ go 1.18
 
 require (
 	github.com/cyverse-de/configurate v0.0.0-20220113221928-13d34aae3f0f
-	github.com/cyverse-de/go-mod/gotelnats v0.0.5
+	github.com/cyverse-de/go-mod/gotelnats v0.0.8
 	github.com/cyverse-de/go-mod/logging v0.0.1
 	github.com/cyverse-de/go-mod/otelutils v0.0.2
 	github.com/cyverse-de/go-mod/protobufjson v0.0.2
-	github.com/cyverse-de/p/go/svcerror v0.0.3
-	github.com/cyverse-de/p/go/user v0.0.7
+	github.com/cyverse-de/p/go/svcerror v0.0.5
+	github.com/cyverse-de/p/go/user v0.0.8
 	github.com/doug-martin/goqu/v9 v9.18.0
 	github.com/jmoiron/sqlx v1.3.4
 	github.com/lib/pq v1.10.1
@@ -19,7 +19,6 @@ require (
 	github.com/uptrace/opentelemetry-go-extra/otelsql v0.1.12
 	github.com/uptrace/opentelemetry-go-extra/otelsqlx v0.1.12
 	go.opentelemetry.io/otel v1.6.3
-	go.opentelemetry.io/otel/trace v1.6.3
 	google.golang.org/protobuf v1.28.0
 )
 
@@ -47,6 +46,7 @@ require (
 	go.opentelemetry.io/otel/exporters/jaeger v1.6.3 // indirect
 	go.opentelemetry.io/otel/metric v0.29.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.6.3 // indirect
+	go.opentelemetry.io/otel/trace v1.6.3 // indirect
 	golang.org/x/crypto v0.0.0-20220315160706-3147a52a75dd // indirect
 	golang.org/x/sys v0.0.0-20220403205710-6acee93ad0eb // indirect
 	golang.org/x/text v0.3.7 // indirect
