@@ -11,7 +11,8 @@ ENV CGO_ENABLED=0
 ENV GOOS=linux
 ENV GOARCH=amd64
 
-RUN go install -v ./...
+RUN go build
+RUN mv discoenv-users /usr/local/bin/
 
 ENTRYPOINT ["discoenv-users"]
 
