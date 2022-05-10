@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -43,6 +44,7 @@ func main() {
 		reconnectWait = flag.Int("reconnect-wait", 1, "The number of seconds to wait between reconnection attempts")
 		natsSubject   = flag.String("subject", "cyverse.discoenv.users.>", "The NATS subject to subscribe to")
 		natsQueue     = flag.String("queue", "discoenv_users_service", "The NATS queue name for this instance. Joins to a queue group by default")
+		varsPort      = flag.Int("vars-port", 60000, "The port to listen on for requests to /debug/vars")
 		logLevel      = flag.String("log-level", "info", "One of trace, debug, info, warn, error, fatal, or panic.")
 	)
 
@@ -103,7 +105,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if err = http.ListenAndServe(":60000", nil); err != nil {
+	portStr := fmt.Sprintf(":%d", *varsPort)
+	if err = http.ListenAndServe(portStr, nil); err != nil {
 		log.Fatal(err)
 	}
 }
