@@ -64,9 +64,6 @@ spec:
               secretKeyRef:
                 name: configs
                 key: OTEL_EXPORTER_JAEGER_HTTP_ENDPOINT
-        ports:
-          - name: listen-port
-            containerPort: 60000
         volumeMounts:
           - name: localtime
             mountPath: /etc/localtime
@@ -77,4 +74,15 @@ spec:
           - name: service-configs
             mountPath: /etc/iplant/de
             readOnly: true
-          
+        livenessProbe:
+          httpGet:
+            path: /debug/vars
+            port: 60000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /debug/vars
+            port: 60000
+          initialDelaySeconds: 5
+          periodSeconds: 5
