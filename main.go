@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"flag"
+	"net/http"
 	"time"
+
+	_ "expvar"
 
 	"github.com/cyverse-de/configurate"
 	"github.com/cyverse-de/go-mod/logging"
@@ -100,5 +103,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	select {}
+	if err = http.ListenAndServe(":60000", nil); err != nil {
+		log.Fatal(err)
+	}
 }
