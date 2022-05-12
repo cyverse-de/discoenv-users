@@ -40,6 +40,12 @@ spec:
             items:
               - key: jobservices.yml
                 path: jobservices.yml
+        - name: nats-client-tls
+          secret:
+            secretName: nats-client-tls
+        - name: nats-services-creds
+          secret:
+            secretName: nats-services-creds
       containers:
       - name: discoenv-users
         image: harbor.cyverse.org/de/discoenv-users
@@ -73,6 +79,12 @@ spec:
             subPath: timezone
           - name: service-configs
             mountPath: /etc/iplant/de
+            readOnly: true
+          - name: nats-client-tls
+            mountPath: /etc/nats/tls
+            readOnly: true
+          - name: nats-services-creds
+            mountPath: /etc/nats/creds
             readOnly: true
         livenessProbe:
           httpGet:
