@@ -99,6 +99,8 @@ func getHandler(conn *nats.EncodedConn, dbconn *sqlx.DB) nats.Handler {
 	return func(subject, reply string, request *user.UserLookupRequest) {
 		var err error
 
+		log.Debugf("request received: %+v\n", request)
+
 		// Set this up early so that potential errors can be returned easily.
 		responseUser := &user.User{}
 
