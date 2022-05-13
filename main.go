@@ -82,6 +82,8 @@ func main() {
 	log.Infof("NATS TLS key file is %s", *tlsKey)
 	log.Infof("NATS CA cert file is %s", *caCert)
 	log.Infof("NATS creds file is %s", *credsPath)
+	log.Infof("NATS subject is %s", *natsSubject)
+	log.Infof("NATS queue is %s", *natsQueue)
 
 	nc, err := nats.Connect(
 		*natsURL,
@@ -96,14 +98,20 @@ func main() {
 		log.Fatal(err)
 	}
 
+	log.Infof("connected to NATS")
+
 	conn, err := nats.NewEncodedConn(nc, "protojson")
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	log.Infof("set up encoded connection to NATS")
+
 	if _, err = conn.QueueSubscribe(*natsSubject, *natsQueue, getHandler(conn, dbconn)); err != nil {
 		log.Fatal(err)
 	}
+
+	log.Infof("subscribed to NATS queue")
 
 	portStr := fmt.Sprintf(":%d", *varsPort)
 	if err = http.ListenAndServe(portStr, nil); err != nil {
