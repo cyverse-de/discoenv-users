@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/cyverse-de/go-mod/gotelnats"
+	"github.com/cyverse-de/p/go/header"
 	"github.com/cyverse-de/p/go/svcerror"
 	"github.com/cyverse-de/p/go/user"
 	"github.com/doug-martin/goqu/v9"
@@ -104,6 +105,10 @@ func getHandler(conn *nats.EncodedConn, dbconn *sqlx.DB) nats.Handler {
 		// Set this up early so that potential errors can be returned easily.
 		responseUser := &user.User{}
 
+		if request.Header == nil {
+			request.Header = &header.Header{}
+
+		}
 		carrier := gotelnats.PBTextMapCarrier{
 			Header: request.Header,
 		}
