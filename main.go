@@ -9,7 +9,7 @@ import (
 
 	_ "expvar"
 
-	"github.com/cyverse-de/configurate"
+	"github.com/cyverse-de/go-mod/cfg"
 	"github.com/cyverse-de/go-mod/logging"
 	"github.com/cyverse-de/go-mod/otelutils"
 	"github.com/cyverse-de/go-mod/protobufjson"
@@ -17,7 +17,6 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/nats-io/nats.go"
 	"github.com/sirupsen/logrus"
-	"github.com/spf13/viper"
 	"github.com/uptrace/opentelemetry-go-extra/otelsql"
 	"github.com/uptrace/opentelemetry-go-extra/otelsqlx"
 	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
@@ -30,11 +29,11 @@ var log = logging.Log.WithFields(logrus.Fields{"service": serviceName})
 func main() {
 	var (
 		err    error
-		config *viper.Viper
 		dbconn *sqlx.DB
 
 		natsURL       = flag.String("nats", "tls://nats:4222", "NATS connection URL")
-		configPath    = flag.String("config", "/etc/iplant/de/jobservices.yml", "The path to the config file")
+		configPath    = flag.String("config", cfg.DefaultConfigPath, "The path to the config file")
+		dotEnvPath    = flag.String("dotenv-path", cfg.DefaultDotEnvPath, "The path to the env file to load")
 		maxDBConns    = flag.Int("max-db-conns", 10, "Sets the maximum number of open database connections")
 		tlsCert       = flag.String("tlscert", "/etc/nats/tls/tls.crt", "Path to the TLS cert used for the NATS connection")
 		tlsKey        = flag.String("tlskey", "/etc/nats/tls/tls.key", "Path to the TLS key used for the NATS connection")
@@ -46,6 +45,7 @@ func main() {
 		natsQueue     = flag.String("queue", "discoenv_users_service", "The NATS queue name for this instance. Joins to a queue group by default")
 		varsPort      = flag.Int("vars-port", 60000, "The port to listen on for requests to /debug/vars")
 		logLevel      = flag.String("log-level", "info", "One of trace, debug, info, warn, error, fatal, or panic.")
+		envPrefix     = flag.String("env-prefix", cfg.DefaultEnvPrefix, "The prefix to look for when setting configuration setting in environment variables")
 	)
 
 	flag.Parse()
@@ -58,13 +58,18 @@ func main() {
 
 	nats.RegisterEncoder("protojson", &protobufjson.Codec{})
 
-	config, err = configurate.Init(*configPath)
+	k, err := cfg.Init(&cfg.Settings{
+		EnvPrefix:   *envPrefix,
+		ConfigPath:  *configPath,
+		DotEnvPath:  *dotEnvPath,
+		StrictMerge: false,
+		FileType:    cfg.YAML,
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Infof("read configuration from %s", *configPath)
 
-	dbURI := config.GetString("db.uri")
+	dbURI := k.String("db.uri")
 	if dbURI == "" {
 		log.Fatal("db.uri must be set in the configuration file")
 	}

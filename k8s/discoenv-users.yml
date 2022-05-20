@@ -39,7 +39,7 @@ spec:
             secretName: service-configs
             items:
               - key: jobservices.yml
-                path: jobservices.yml
+                path: service.yml
         - name: nats-client-tls
           secret:
             secretName: nats-client-tls
@@ -78,7 +78,7 @@ spec:
             mountPath: /etc/timezone
             subPath: timezone
           - name: service-configs
-            mountPath: /etc/iplant/de
+            mountPath: /etc/cyverse/de/configs
             readOnly: true
           - name: nats-client-tls
             mountPath: /etc/nats/tls
