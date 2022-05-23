@@ -31,7 +31,6 @@ func main() {
 		err    error
 		dbconn *sqlx.DB
 
-		natsURL       = flag.String("nats", "tls://nats:4222", "NATS connection URL")
 		configPath    = flag.String("config", cfg.DefaultConfigPath, "The path to the config file")
 		dotEnvPath    = flag.String("dotenv-path", cfg.DefaultDotEnvPath, "The path to the env file to load")
 		maxDBConns    = flag.Int("max-db-conns", 10, "Sets the maximum number of open database connections")
@@ -74,6 +73,19 @@ func main() {
 		log.Fatal("db.uri must be set in the configuration file")
 	}
 
+	natsURL := k.String("nats.cluster")
+	if natsURL == "" {
+		log.Fatal("nats.cluster must be set in the configuration file or in the env vars as DISCOENV_NATS_CLUSTER")
+	}
+
+	log.Infof("NATS URL is %s", natsURL)
+	log.Infof("NATS TLS cert file is %s", *tlsCert)
+	log.Infof("NATS TLS key file is %s", *tlsKey)
+	log.Infof("NATS CA cert file is %s", *caCert)
+	log.Infof("NATS creds file is %s", *credsPath)
+	log.Infof("NATS subject is %s", *natsSubject)
+	log.Infof("NATS queue is %s", *natsQueue)
+
 	dbconn = otelsqlx.MustConnect(
 		"postgres",
 		dbURI,
@@ -82,16 +94,8 @@ func main() {
 	dbconn.SetMaxOpenConns(*maxDBConns)
 	log.Info("done connecting to the database")
 
-	log.Infof("NATS URL is %s", *natsURL)
-	log.Infof("NATS TLS cert file is %s", *tlsCert)
-	log.Infof("NATS TLS key file is %s", *tlsKey)
-	log.Infof("NATS CA cert file is %s", *caCert)
-	log.Infof("NATS creds file is %s", *credsPath)
-	log.Infof("NATS subject is %s", *natsSubject)
-	log.Infof("NATS queue is %s", *natsQueue)
-
 	nc, err := nats.Connect(
-		*natsURL,
+		natsURL,
 		nats.UserCredentials(*credsPath),
 		nats.RootCAs(*caCert),
 		nats.ClientCert(*tlsCert, *tlsKey),
