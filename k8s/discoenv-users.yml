@@ -13,6 +13,7 @@ spec:
         de-app: discoenv-users
         app: de
     spec:
+      serviceAccount: configurator
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -46,6 +47,14 @@ spec:
         - name: nats-services-creds
           secret:
             secretName: nats-services-creds
+        - name: nats-configuration
+          emptyDir: {}
+      initContainers:
+      - name: nats-configurator
+        image: harbor.cyverse.org/de/nats-configurator
+        volumeMounts:
+          - name: nats-configurator
+            mountPath: /etc/cyverse/de/env
       containers:
       - name: discoenv-users
         image: harbor.cyverse.org/de/discoenv-users
@@ -85,6 +94,9 @@ spec:
             readOnly: true
           - name: nats-services-creds
             mountPath: /etc/nats/creds
+            readOnly: true
+          - name: nats-configuration
+            mountPath: /etc/cyverse/de/env
             readOnly: true
         livenessProbe:
           httpGet:
