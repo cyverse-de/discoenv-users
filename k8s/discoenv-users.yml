@@ -13,6 +13,7 @@ spec:
         de-app: discoenv-users
         app: de
     spec:
+      serviceAccount: configurator
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -39,13 +40,21 @@ spec:
             secretName: service-configs
             items:
               - key: jobservices.yml
-                path: jobservices.yml
+                path: service.yml
         - name: nats-client-tls
           secret:
             secretName: nats-client-tls
         - name: nats-services-creds
           secret:
             secretName: nats-services-creds
+        - name: nats-configuration
+          emptyDir: {}
+      initContainers:
+      - name: nats-configurator
+        image: harbor.cyverse.org/de/nats-configurator
+        volumeMounts:
+          - name: nats-configurator
+            mountPath: /etc/cyverse/de/env
       containers:
       - name: discoenv-users
         image: harbor.cyverse.org/de/discoenv-users
@@ -78,13 +87,16 @@ spec:
             mountPath: /etc/timezone
             subPath: timezone
           - name: service-configs
-            mountPath: /etc/iplant/de
+            mountPath: /etc/cyverse/de/configs
             readOnly: true
           - name: nats-client-tls
             mountPath: /etc/nats/tls
             readOnly: true
           - name: nats-services-creds
             mountPath: /etc/nats/creds
+            readOnly: true
+          - name: nats-configuration
+            mountPath: /etc/cyverse/de/env
             readOnly: true
         livenessProbe:
           httpGet:
