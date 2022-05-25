@@ -8,6 +8,7 @@ require (
 	github.com/cyverse-de/go-mod/logging v0.0.1
 	github.com/cyverse-de/go-mod/otelutils v0.0.2
 	github.com/cyverse-de/go-mod/protobufjson v0.0.2
+	github.com/cyverse-de/p/go/header v0.0.0-20220425195853-720402e94a27
 	github.com/cyverse-de/p/go/svcerror v0.0.5
 	github.com/cyverse-de/p/go/user v0.0.8
 	github.com/doug-martin/goqu/v9 v9.18.0
@@ -23,7 +24,6 @@ require (
 )
 
 require (
-	github.com/cyverse-de/p/go/header v0.0.0-20220425195853-720402e94a27 // indirect
 	github.com/fsnotify/fsnotify v1.5.1 // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
