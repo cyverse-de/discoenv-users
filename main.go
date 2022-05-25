@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	_ "expvar"
@@ -37,7 +38,7 @@ func main() {
 		tlsCert       = flag.String("tlscert", "/etc/nats/tls/tls.crt", "Path to the TLS cert used for the NATS connection")
 		tlsKey        = flag.String("tlskey", "/etc/nats/tls/tls.key", "Path to the TLS key used for the NATS connection")
 		caCert        = flag.String("tlsca", "/etc/nats/tls/ca.crt", "Path to the TLS CA cert used for the NATS connection")
-		credsPath     = flag.String("creds", "/etc/nats/creds/service.creds", "Path to the NATS user creds file used for authn with NATS")
+		credsPath     = flag.String("creds", "/etc/nats/creds/services.creds", "Path to the NATS user creds file used for authn with NATS")
 		maxReconnects = flag.Int("max-reconnects", 10, "The number of reconnection attempts the NATS client will make if the server does not respond")
 		reconnectWait = flag.Int("reconnect-wait", 1, "The number of seconds to wait between reconnection attempts")
 		natsSubject   = flag.String("subject", "cyverse.discoenv.users.>", "The NATS subject to subscribe to")
@@ -73,6 +74,15 @@ func main() {
 		log.Fatal("db.uri must be set in the configuration file")
 	}
 
+	log.Info("connecting to the database")
+	dbconn = otelsqlx.MustConnect(
+		"postgres",
+		dbURI,
+		otelsql.WithAttributes(semconv.DBSystemPostgreSQL),
+	)
+	dbconn.SetMaxOpenConns(*maxDBConns)
+	log.Info("done connecting to the database")
+
 	natsURL := k.String("nats.cluster")
 	if natsURL == "" {
 		log.Fatal("nats.cluster must be set in the configuration file or in the env vars as DISCOENV_NATS_CLUSTER")
@@ -86,14 +96,6 @@ func main() {
 	log.Infof("NATS subject is %s", *natsSubject)
 	log.Infof("NATS queue is %s", *natsQueue)
 
-	dbconn = otelsqlx.MustConnect(
-		"postgres",
-		dbURI,
-		otelsql.WithAttributes(semconv.DBSystemPostgreSQL),
-	)
-	dbconn.SetMaxOpenConns(*maxDBConns)
-	log.Info("done connecting to the database")
-
 	nc, err := nats.Connect(
 		natsURL,
 		nats.UserCredentials(*credsPath),
@@ -103,23 +105,20 @@ func main() {
 		nats.MaxReconnects(*maxReconnects),
 		nats.ReconnectWait(time.Duration(*reconnectWait)*time.Second),
 		nats.DisconnectErrHandler(func(nc *nats.Conn, err error) {
-			log.Errorf("disconnected from nats: %q\n", err)
+			log.Errorf("disconnected from nats: %s", err.Error())
 		}),
 		nats.ReconnectHandler(func(nc *nats.Conn) {
-			log.Infof("reconnected to %v!\n", nc.ConnectedUrl())
+			log.Infof("reconnected to %s", nc.ConnectedUrl())
 		}),
 		nats.ClosedHandler(func(nc *nats.Conn) {
-			log.Errorf("connection closed: %q\n", nc.LastError())
+			log.Errorf("connection closed: %s", nc.LastError().Error())
 		}),
 	)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	log.Info("configured servers:")
-	for _, s := range nc.Servers() {
-		log.Infof("  %s", s)
-	}
+	log.Infof("configured servers: %s", strings.Join(nc.Servers(), " "))
 	log.Infof("connected to NATS host: %s", nc.ConnectedServerName())
 
 	conn, err := nats.NewEncodedConn(nc, "protojson")
