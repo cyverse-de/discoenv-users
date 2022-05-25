@@ -102,6 +102,15 @@ func main() {
 		nats.RetryOnFailedConnect(true),
 		nats.MaxReconnects(*maxReconnects),
 		nats.ReconnectWait(time.Duration(*reconnectWait)*time.Second),
+		nats.DisconnectErrHandler(func(nc *nats.Conn, err error) {
+			log.Errorf("disconnected from nats: %q\n", err)
+		}),
+		nats.ReconnectHandler(func(nc *nats.Conn) {
+			log.Infof("reconnected to %v!\n", nc.ConnectedUrl())
+		}),
+		nats.ClosedHandler(func(nc *nats.Conn) {
+			log.Errorf("connection closed: %q\n", nc.LastError())
+		}),
 	)
 	if err != nil {
 		log.Fatal(err)
