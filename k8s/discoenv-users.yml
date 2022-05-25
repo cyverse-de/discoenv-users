@@ -53,7 +53,7 @@ spec:
       - name: nats-configurator
         image: harbor.cyverse.org/de/nats-configurator
         volumeMounts:
-          - name: nats-configurator
+          - name: nats-configuration
             mountPath: /etc/cyverse/de/env
       containers:
       - name: discoenv-users
