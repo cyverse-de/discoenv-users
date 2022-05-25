@@ -107,7 +107,11 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Infof("connected to NATS")
+	log.Info("configured servers:")
+	for _, s := range nc.Servers() {
+		log.Infof("  %s", s)
+	}
+	log.Infof("connected to NATS host: %s", nc.ConnectedServerName())
 
 	conn, err := nats.NewEncodedConn(nc, "protojson")
 	if err != nil {
