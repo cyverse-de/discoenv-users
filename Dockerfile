@@ -7,12 +7,15 @@ COPY go.sum .
 
 COPY . .
 
-ENV CGO_ENABLED=0
 ENV GOOS=linux
 ENV GOARCH=amd64
 
 RUN go build --buildvcs=false
-RUN mv discoenv-users /usr/local/bin/
+
+FROM ubuntu:22.04
+
+RUN apt-get update -y && apt-get install -y vim dnsutils
+COPY --from=build-root /build/discoenv-users /usr/local/bin
 
 ENTRYPOINT ["discoenv-users"]
 
