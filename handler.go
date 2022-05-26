@@ -103,7 +103,9 @@ func getHandler(conn *nats.EncodedConn, dbconn *sqlx.DB) nats.Handler {
 		log.Debugf("request received: %+v\n", request)
 
 		// Set this up early so that potential errors can be returned easily.
-		responseUser := &user.User{}
+		responseUser := &user.User{
+			Header: &header.Header{},
+		}
 
 		if request.Header == nil {
 			request.Header = &header.Header{}
