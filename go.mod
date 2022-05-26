@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/cyverse-de/go-mod/cfg v0.0.1
-	github.com/cyverse-de/go-mod/gotelnats v0.0.8
+	github.com/cyverse-de/go-mod/gotelnats v0.0.9
 	github.com/cyverse-de/go-mod/logging v0.0.1
 	github.com/cyverse-de/go-mod/otelutils v0.0.2
 	github.com/cyverse-de/go-mod/protobufjson v0.0.2

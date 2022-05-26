@@ -104,16 +104,13 @@ func getHandler(conn *nats.EncodedConn, dbconn *sqlx.DB) nats.Handler {
 
 		// Set this up early so that potential errors can be returned easily.
 		responseUser := &user.User{
-			Header: &header.Header{
-				Map: make(map[string]*header.Header_Value),
-			},
+			Header: gotelnats.NewHeader()
 		}
 
 		if request.Header == nil {
-			request.Header = &header.Header{
-				Map: make(map[string]*header.Header_Value),
-			}
+			request.Header = gotelnats.NewHeader()
 		}
+		
 		carrier := gotelnats.PBTextMapCarrier{
 			Header: request.Header,
 		}

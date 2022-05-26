@@ -20,6 +20,8 @@ github.com/cyverse-de/go-mod/cfg v0.0.1 h1:rCNNrGSTHYbnygepgDplBRPZhHQ8SR1zSRCkN
 github.com/cyverse-de/go-mod/cfg v0.0.1/go.mod h1:9yHgS328eyTam8Ji//3oOb4ckOT/o5Qp0iSXZk5cVeM=
 github.com/cyverse-de/go-mod/gotelnats v0.0.8 h1:4bH+RIEP/5y6IOHlVmE+1lQNqjPDfdPwAHDIwS5aw4A=
 github.com/cyverse-de/go-mod/gotelnats v0.0.8/go.mod h1:UDIqvtSCeOKvjV+gZ+DrcPoTHPYkQjIuFxw7IlcbAI0=
+github.com/cyverse-de/go-mod/gotelnats v0.0.9 h1:82p8W8Sej8YcLH24jDaYOjHQN/mCsk8avmptAm7zGjU=
+github.com/cyverse-de/go-mod/gotelnats v0.0.9/go.mod h1:UDIqvtSCeOKvjV+gZ+DrcPoTHPYkQjIuFxw7IlcbAI0=
 github.com/cyverse-de/go-mod/logging v0.0.1 h1:i+AmnzxVL2HPsvvBiG0qHR3Uov3w0+JxuN2f74yKaKE=
 github.com/cyverse-de/go-mod/logging v0.0.1/go.mod h1:KkvW+/cMUdkfsJAD3uqMxHEb5naX8bwnO6z8znqHILQ=
 github.com/cyverse-de/go-mod/otelutils v0.0.2 h1:7O3jWQgf+PIIACSwtQM5SNtn6xTxxaLIUW6kjEKUpHM=
