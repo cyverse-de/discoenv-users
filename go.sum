@@ -18,8 +18,6 @@ github.com/bgentry/speakeasy v0.1.0/go.mod h1:+zsyZBPWlz7T6j88CTgSN5bM796AkVf0kB
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
 github.com/cyverse-de/go-mod/cfg v0.0.1 h1:rCNNrGSTHYbnygepgDplBRPZhHQ8SR1zSRCkN0o/mOc=
 github.com/cyverse-de/go-mod/cfg v0.0.1/go.mod h1:9yHgS328eyTam8Ji//3oOb4ckOT/o5Qp0iSXZk5cVeM=
-github.com/cyverse-de/go-mod/gotelnats v0.0.8 h1:4bH+RIEP/5y6IOHlVmE+1lQNqjPDfdPwAHDIwS5aw4A=
-github.com/cyverse-de/go-mod/gotelnats v0.0.8/go.mod h1:UDIqvtSCeOKvjV+gZ+DrcPoTHPYkQjIuFxw7IlcbAI0=
 github.com/cyverse-de/go-mod/gotelnats v0.0.9 h1:82p8W8Sej8YcLH24jDaYOjHQN/mCsk8avmptAm7zGjU=
 github.com/cyverse-de/go-mod/gotelnats v0.0.9/go.mod h1:UDIqvtSCeOKvjV+gZ+DrcPoTHPYkQjIuFxw7IlcbAI0=
 github.com/cyverse-de/go-mod/logging v0.0.1 h1:i+AmnzxVL2HPsvvBiG0qHR3Uov3w0+JxuN2f74yKaKE=
@@ -139,6 +137,7 @@ github.com/mitchellh/reflectwalk v1.0.2/go.mod h1:mSTlrgnPZtwu0c4WaC2kGObEpuNDbx
 github.com/nats-io/jwt/v2 v2.2.1-0.20220330180145-442af02fd36a h1:lem6QCvxR0Y28gth9P+wV2K/zYUUAkJ+55U8cpS0p5I=
 github.com/nats-io/jwt/v2 v2.2.1-0.20220330180145-442af02fd36a/go.mod h1:0tqz9Hlu6bCBFLWAASKhE5vUA4c24L9KPUUgvwumE/k=
 github.com/nats-io/nats-server/v2 v2.8.1 h1:WZ9m/d8rklkWo6opo3X927vXnuaE00VEEl5zXcpL6qw=
+github.com/nats-io/nats-server/v2 v2.8.1/go.mod h1:vIdpKz3OG+DCg4q/xVPdXHoztEyKDWRtykQ4N7hd7C4=
 github.com/nats-io/nats.go v1.14.0 h1:/QLCss4vQ6wvDpbqXucsVRDi13tFIR6kTdau+nXzKJw=
 github.com/nats-io/nats.go v1.14.0/go.mod h1:BPko4oXsySz4aSWeFgOHLZs3G4Jq4ZAyE6/zMCxRT6w=
 github.com/nats-io/nkeys v0.3.0 h1:cgM5tL53EvYRU+2YLXIK0G2mJtK12Ft9oeooSZMA2G8=
