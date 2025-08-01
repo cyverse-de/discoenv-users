@@ -12,9 +12,8 @@ ENV GOARCH=amd64
 
 RUN go build --buildvcs=false
 
-FROM ubuntu:22.04
+FROM debian:stable-slim
 
-RUN apt-get update -y && apt-get install -y vim dnsutils
 COPY --from=build-root /build/discoenv-users /usr/local/bin
 
 ENTRYPOINT ["discoenv-users"]
