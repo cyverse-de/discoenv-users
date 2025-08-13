@@ -105,7 +105,11 @@ func main() {
 		nats.MaxReconnects(*maxReconnects),
 		nats.ReconnectWait(time.Duration(*reconnectWait)*time.Second),
 		nats.DisconnectErrHandler(func(nc *nats.Conn, err error) {
-			log.Errorf("disconnected from nats: %s", err.Error())
+			if err != nil {
+				log.Errorf("disconnected from nats: %s", err.Error())
+			} else {
+				log.Error("disconnected from nats")
+			}
 		}),
 		nats.ReconnectHandler(func(nc *nats.Conn) {
 			log.Infof("reconnected to %s", nc.ConnectedUrl())
