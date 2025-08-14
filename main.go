@@ -108,7 +108,7 @@ func main() {
 			if err != nil {
 				log.Errorf("disconnected from nats: %s", err.Error())
 			} else {
-				log.Error("disconnected from nats")
+				log.Error("disconnected from nats with no error - check NATS authentication settings")
 			}
 		}),
 		nats.ReconnectHandler(func(nc *nats.Conn) {
