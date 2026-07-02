@@ -122,6 +122,7 @@ func main() {
 	log.Infof("configured servers: %s", strings.Join(nc.Servers(), " "))
 	log.Infof("connected to NATS host: %s", nc.ConnectedServerName())
 
+	//nolint:staticcheck // EncodedConn retirement is a planned follow-up to the protobuf removal
 	conn, err := nats.NewEncodedConn(nc, nats.JSON_ENCODER)
 	if err != nil {
 		log.Fatal(err)
@@ -129,6 +130,7 @@ func main() {
 
 	log.Infof("set up encoded connection to NATS")
 
+	//nolint:staticcheck // EncodedConn retirement is a planned follow-up to the protobuf removal
 	if _, err = conn.QueueSubscribe(*natsSubject, *natsQueue, getHandler(conn, dbconn)); err != nil {
 		log.Fatal(err)
 	}

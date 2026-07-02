@@ -95,6 +95,7 @@ func loginCount(ctx context.Context, dbconn *sqlx.DB, userID string) (uint, erro
 	return count, nil
 }
 
+//nolint:staticcheck // EncodedConn retirement is a planned follow-up to the protobuf removal
 func getHandler(conn *nats.EncodedConn, dbconn *sqlx.DB) nats.Handler {
 	return func(subject, reply string, request *user.UserLookupRequest) {
 		var err error
