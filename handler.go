@@ -134,6 +134,25 @@ func getHandler(conn *nats.EncodedConn, dbconn *sqlx.DB) nats.Handler {
 			q = q.Join(prefsT, goqu.On(usersT.Col("id").Eq(prefsT.Col("user_id"))))
 		}
 
+		// The old protojson decoder rejected requests setting more than one
+		// oneof member; re-establish that exclusivity for the flattened fields.
+		idsSet := 0
+		for _, id := range []*string{request.AnalysisId, request.Username, request.UserId} {
+			if id != nil {
+				idsSet++
+			}
+		}
+		if idsSet > 1 {
+			lookupErr := errors.New("only one of analysisId, username, and userId may be set")
+			responseUser.Error = gotelnats.InitServiceError(ctx, lookupErr, &gotelnats.ErrorOptions{
+				ErrorCode: svcerror.ErrorCode_BAD_REQUEST,
+			})
+			if err = gotelnats.PublishResponse(ctx, conn, reply, responseUser); err != nil {
+				log.Error(err)
+			}
+			return
+		}
+
 		switch {
 		case request.AnalysisId != nil:
 			q = q.
@@ -242,7 +261,7 @@ func getHandler(conn *nats.EncodedConn, dbconn *sqlx.DB) nats.Handler {
 				return
 			}
 
-			responseUser.Logins = []*user.Login{}
+			responseUser.Logins = make([]*user.Login, 0, len(logins))
 
 			for _, login := range logins {
 				ul := user.Login{}
