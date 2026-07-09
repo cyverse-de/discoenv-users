@@ -13,7 +13,6 @@ import (
 	"github.com/cyverse-de/go-mod/cfg"
 	"github.com/cyverse-de/go-mod/logging"
 	"github.com/cyverse-de/go-mod/otelutils"
-	"github.com/cyverse-de/go-mod/protobufjson"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"github.com/nats-io/nats.go"
@@ -55,8 +54,6 @@ func main() {
 	defer cancel()
 	shutdown := otelutils.TracerProviderFromEnv(tracerCtx, serviceName, func(e error) { log.Fatal(e) })
 	defer shutdown()
-
-	nats.RegisterEncoder("protojson", &protobufjson.Codec{})
 
 	k, err := cfg.Init(&cfg.Settings{
 		EnvPrefix:   *envPrefix,
@@ -125,13 +122,15 @@ func main() {
 	log.Infof("configured servers: %s", strings.Join(nc.Servers(), " "))
 	log.Infof("connected to NATS host: %s", nc.ConnectedServerName())
 
-	conn, err := nats.NewEncodedConn(nc, "protojson")
+	//nolint:staticcheck // EncodedConn retirement is a planned follow-up to the protobuf removal
+	conn, err := nats.NewEncodedConn(nc, nats.JSON_ENCODER)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	log.Infof("set up encoded connection to NATS")
 
+	//nolint:staticcheck // EncodedConn retirement is a planned follow-up to the protobuf removal
 	if _, err = conn.QueueSubscribe(*natsSubject, *natsQueue, getHandler(conn, dbconn)); err != nil {
 		log.Fatal(err)
 	}

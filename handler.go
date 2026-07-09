@@ -3,15 +3,15 @@ package main
 import (
 	"context"
 	"database/sql"
-	"fmt"
+	"errors"
 
 	"github.com/cyverse-de/go-mod/gotelnats"
+	"github.com/cyverse-de/p/go/ptypes"
 	"github.com/cyverse-de/p/go/svcerror"
 	"github.com/cyverse-de/p/go/user"
 	"github.com/doug-martin/goqu/v9"
 	"github.com/jmoiron/sqlx"
 	"github.com/nats-io/nats.go"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type lookupUser struct {
@@ -95,6 +95,7 @@ func loginCount(ctx context.Context, dbconn *sqlx.DB, userID string) (uint, erro
 	return count, nil
 }
 
+//nolint:staticcheck // EncodedConn retirement is a planned follow-up to the protobuf removal
 func getHandler(conn *nats.EncodedConn, dbconn *sqlx.DB) nats.Handler {
 	return func(subject, reply string, request *user.UserLookupRequest) {
 		var err error
@@ -102,7 +103,7 @@ func getHandler(conn *nats.EncodedConn, dbconn *sqlx.DB) nats.Handler {
 		log.Debugf("request received: %+v\n", request)
 
 		// Set this up early so that potential errors can be returned easily.
-		responseUser := &user.User{
+		responseUser := &user.LookupResponse{
 			Header: gotelnats.NewHeader(),
 		}
 
@@ -134,22 +135,39 @@ func getHandler(conn *nats.EncodedConn, dbconn *sqlx.DB) nats.Handler {
 			q = q.Join(prefsT, goqu.On(usersT.Col("id").Eq(prefsT.Col("user_id"))))
 		}
 
-		switch x := request.LookupIds.(type) {
-		case *user.UserLookupRequest_AnalysisId:
-			analysisID := request.GetAnalysisId()
+		// The old protojson decoder rejected requests setting more than one
+		// oneof member; re-establish that exclusivity for the flattened fields.
+		idsSet := 0
+		for _, id := range []*string{request.AnalysisId, request.Username, request.UserId} {
+			if id != nil {
+				idsSet++
+			}
+		}
+		if idsSet > 1 {
+			lookupErr := errors.New("only one of analysisId, username, and userId may be set")
+			responseUser.Error = gotelnats.InitServiceError(ctx, lookupErr, &gotelnats.ErrorOptions{
+				ErrorCode: svcerror.ErrorCode_BAD_REQUEST,
+			})
+			if err = gotelnats.PublishResponse(ctx, conn, reply, responseUser); err != nil {
+				log.Error(err)
+			}
+			return
+		}
 
+		switch {
+		case request.AnalysisId != nil:
 			q = q.
 				Join(jobsT, goqu.On(usersT.Col("id").Eq(jobsT.Col("user_id")))).
-				Where(jobsT.Col("id").Eq(analysisID))
+				Where(jobsT.Col("id").Eq(request.GetAnalysisId()))
 
-		case *user.UserLookupRequest_Username:
+		case request.Username != nil:
 			q = q.Where(usersT.Col("username").Eq(request.GetUsername()))
 
-		case *user.UserLookupRequest_UserId:
+		case request.UserId != nil:
 			q = q.Where(usersT.Col("id").Eq(request.GetUserId()))
 
 		default:
-			lookupErr := fmt.Errorf("lookup type %T not known", x)
+			lookupErr := errors.New("no lookup id was set in the request")
 			responseUser.Error = gotelnats.InitServiceError(ctx, lookupErr, &gotelnats.ErrorOptions{
 				ErrorCode: svcerror.ErrorCode_BAD_REQUEST,
 			})
@@ -217,11 +235,11 @@ func getHandler(conn *nats.EncodedConn, dbconn *sqlx.DB) nats.Handler {
 
 		responseUser.Uuid = u.UserID
 		responseUser.Username = u.Username
-		responseUser.Preferences = &user.User_Preferences{
+		responseUser.Preferences = &user.Preferences{
 			Uuid:        u.PreferencesID,
 			Preferences: u.Preferences,
 		}
-		responseUser.SavedSearches = &user.User_SavedSearches{
+		responseUser.SavedSearches = &user.SavedSearches{
 			Uuid:          u.SavedSearchesID,
 			SavedSearches: u.SavedSearches,
 		}
@@ -244,10 +262,10 @@ func getHandler(conn *nats.EncodedConn, dbconn *sqlx.DB) nats.Handler {
 				return
 			}
 
-			responseUser.Logins = []*user.User_Login{}
+			responseUser.Logins = make([]*user.Login, 0, len(logins))
 
 			for _, login := range logins {
-				ul := user.User_Login{}
+				ul := user.Login{}
 				if login.IPAddress.Valid {
 					ul.IpAddress = login.IPAddress.String
 				}
@@ -255,10 +273,10 @@ func getHandler(conn *nats.EncodedConn, dbconn *sqlx.DB) nats.Handler {
 					ul.UserAgent = login.UserAgent.String
 				}
 				if login.LoginTime.Valid {
-					ul.LoginTime = timestamppb.New(login.LoginTime.Time)
+					ul.LoginTime = ptypes.New(login.LoginTime.Time)
 				}
 				if login.LogoutTime.Valid {
-					ul.LogoutTime = timestamppb.New(login.LogoutTime.Time)
+					ul.LogoutTime = ptypes.New(login.LogoutTime.Time)
 				}
 				responseUser.Logins = append(responseUser.Logins, &ul)
 			}
