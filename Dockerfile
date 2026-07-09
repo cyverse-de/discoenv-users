@@ -1,4 +1,4 @@
-FROM golang:1.22 as build-root
+FROM golang:1.25 as build-root
 
 WORKDIR /build
 
